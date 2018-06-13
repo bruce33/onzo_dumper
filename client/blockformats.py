@@ -62,7 +62,7 @@ class RealPower_091002(DataFormat):
 
     def _decode(self, headers, loSamples, block_index = None, last_timestamp = None, last_value = None):
         timestamp = headers['timestamp']
-        if timestamp == 4294967295L:
+        if timestamp == 4294967295:
             if last_timestamp is None:
                 log.error('Bug #???: Block %i has no valid headers. Ignoring.' % (block_index,))
                 return []
@@ -117,7 +117,7 @@ class Energy_091002(DataFormat):
             i /= 2
 
         timestamp = headers['timestamp']
-        if timestamp == 4294967295L:
+        if timestamp == 4294967295:
             if last_timestamp is None:
                 log.error('Bug #???: Block %r has no valid headers. Ignoring.' % block_index)
                 return []

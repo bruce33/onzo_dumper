@@ -4,7 +4,7 @@ reload(sys)
 sys.setdefaultencoding('utf-8')
 import struct
 import ctypes
-import threading
+# import threading
 import Queue
 import random
 import logging
@@ -12,9 +12,11 @@ log = logging.getLogger('device')
 import wx
 from client import devicetypes
 from client import usbutils
-from client import utils
-from client import internationalisation
-RESET_MAYBE = _('If the device has a blank screen, please restart it.\n(Disconnect from USB and remove the batteries. \nThen replace the batteries and reconnect USB)\n')
+import usb
+# from client import utils
+# from client import internationalisation
+# RESET_MAYBE = _('If the device has a blank screen, please restart it.\n(Disconnect from USB and remove the batteries. \nThen replace the batteries and reconnect USB)\n')
+RESET_MAYBE = 'reset maybe'
 WINDOWS = False
 MAC = False
 LINUX = False
@@ -28,8 +30,8 @@ if WINDOWS:
     onzo_dll = ctypes.windll.LoadLibrary('OnzoDisplayClientLibrary.dll')
 elif MAC:
     onzo_dll = ctypes.cdll.LoadLibrary('OnzoPyDisplays.dylib')
-elif LINUX:
-    onzo_dll = ctypes.cdll.LoadLibrary('OnzoPyDisplays.so.1.0.0')
+#elif LINUX:
+#    onzo_dll = {} #ctypes.cdll.LoadLibrary('OnzoPyDisplays.so.1.0.0')
 SixtyFourChars = ctypes.c_char * 64
 SixtyFourCharsPtr = ctypes.POINTER(SixtyFourChars)
 if WINDOWS:
@@ -38,18 +40,19 @@ if WINDOWS:
 else:
     PROGCALLBACK = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_float)
     CALLBACK = ctypes.CFUNCTYPE(None, SixtyFourCharsPtr)
-onzo_dll.ONZO_DisplayFind.argtypes = []
-onzo_dll.ONZO_DisplayFind.restype = ctypes.c_int
-onzo_dll.ONZO_DisplayWrite.argtypes = [SixtyFourChars]
-onzo_dll.ONZO_DisplayWrite.restype = ctypes.c_int
-onzo_dll.ONZO_DisplayInit2.argtypes = [ctypes.c_int, ctypes.c_int, CALLBACK]
-onzo_dll.ONZO_DisplayInit2.restype = ctypes.c_int
-onzo_dll.ONZO_DisplayUpdateFirmware.argtypes = [ctypes.c_char_p]
-onzo_dll.ONZO_DisplayUpdateFirmware.restype = ctypes.c_int
-onzo_dll.ONZO_DisplayUpdateFirmwareWithProgress.argtypes = [ctypes.c_char_p, PROGCALLBACK]
-onzo_dll.ONZO_DisplayUpdateFirmwareWithProgress.restype = ctypes.c_int
-onzo_dll.ONZO_DisplayReset.argtypes = []
-onzo_dll.ONZO_DisplayReset.restype = ctypes.c_int
+if not LINUX:
+    onzo_dll.ONZO_DisplayFind.argtypes = []
+    onzo_dll.ONZO_DisplayFind.restype = ctypes.c_int
+    onzo_dll.ONZO_DisplayWrite.argtypes = [SixtyFourChars]
+    onzo_dll.ONZO_DisplayWrite.restype = ctypes.c_int
+    onzo_dll.ONZO_DisplayInit2.argtypes = [ctypes.c_int, ctypes.c_int, CALLBACK]
+    onzo_dll.ONZO_DisplayInit2.restype = ctypes.c_int
+    onzo_dll.ONZO_DisplayUpdateFirmware.argtypes = [ctypes.c_char_p]
+    onzo_dll.ONZO_DisplayUpdateFirmware.restype = ctypes.c_int
+    onzo_dll.ONZO_DisplayUpdateFirmwareWithProgress.argtypes = [ctypes.c_char_p, PROGCALLBACK]
+    onzo_dll.ONZO_DisplayUpdateFirmwareWithProgress.restype = ctypes.c_int
+    onzo_dll.ONZO_DisplayReset.argtypes = []
+    onzo_dll.ONZO_DisplayReset.restype = ctypes.c_int
 if MAC:
     onzo_dll.ONZO_CheckStillConnected.argtypes = []
     onzo_dll.ONZO_CheckStillConnected.restype = ctypes.c_int
@@ -129,6 +132,7 @@ class Device(object):
         self.queue = Queue.Queue()
         self.vendorid = None
         self.productid = None
+        self.dev = None
         return
 
     def find(self):
@@ -139,7 +143,7 @@ class Device(object):
             return r or None
         return None
 
-    def connect(self, vendor_id = devicetypes.vendor_ids[0], product_id = devicetypes.default_product_id):
+    def connect2(self, vendor_id = devicetypes.vendor_ids[0], product_id = devicetypes.default_product_id):
         if self.bootloadermode:
             return
         if self.connected and MAC:
@@ -166,6 +170,69 @@ class Device(object):
         self.last_command_time = time.time()
         self.connected = True
 
+    '''udev rules need to be set in /etc/udev/rules.d'''
+
+    def detach(self, interface=0):
+        '''Detach the interface'''
+        if self.dev.is_kernel_driver_active(interface):
+            print "Detaching kernel driver for interface %d" % (interface)
+            self.dev.detach_kernel_driver(interface)
+
+    def attach(self, interface=0):
+        if not self.dev.is_kernel_driver_active(interface):
+            print "Attaching kernel driver for interface %d" % (interface)
+            self.dev.attach_kernel_driver(interface)
+
+    def unclaim(self, interface=0):
+        print "Unclaiming interface %d " % (interface)
+        usb.util.release_interface(self.dev, interface)
+
+    def claim(self, interface=0):
+        '''Claiming interface'''
+        usb.util.claim_interface(self.dev, interface)
+
+    def disconnect(self):
+#        for interface in range(0,1):
+ #           self.detach(interface)
+        self.dev.reset()
+
+    def connect(self, vendor_id = devicetypes.vendor_ids[0], product_id = devicetypes.default_product_id):
+        self.dev = usb.core.find(idVendor=vendor_id, idProduct=product_id)
+        if self.dev is None:
+            raise ValueError('Device not connected')
+        else:
+            self.dev.reset()
+            for interface in range(0,1):
+                self.detach(interface)
+                self.unclaim(interface)
+        self.dev.set_configuration()
+        cfg = self.dev.get_active_configuration()
+        intf = cfg[(0,0)]
+
+        self.epWrite = usb.util.find_descriptor(
+            intf,
+            # match the first OUT endpoint
+            custom_match = \
+                lambda e: \
+                    usb.util.endpoint_direction(e.bEndpointAddress) == \
+                    usb.util.ENDPOINT_OUT)
+
+        assert self.epWrite is not None
+
+        self.epRead = usb.util.find_descriptor(
+            intf,
+            # match the first OUT endpoint
+            custom_match = \
+                lambda e: \
+                    usb.util.endpoint_direction(e.bEndpointAddress) == \
+                    usb.util.ENDPOINT_IN)
+        assert self.epRead is not None
+
+        self.vendorid = vendor_id
+        self.productid = product_id
+        self.last_command_time = time.time()
+        self.connected = True
+
     def is_real(self):
         return True
 
@@ -176,15 +243,18 @@ class Device(object):
     def _frame_write(self, data):
         if len(data) != 64:
             log.warning('bad data length 64!=%r  data=%r' % (len(data), hexify_string(data)))
-        i = onzo_dll.ONZO_DisplayWrite(SixtyFourChars(*[ c for c in data ]))
-        if i not in (0,):
+        i = self.epWrite.write(data)
+#        i = onzo_dll.ONZO_DisplayWrite(SixtyFourChars(*[ c for c in data ]))
+        if i not in (64,): # 64
             raise OnzoException(i, 'bad return value ONZO_DisplayWrite(%r) = %r' % (hexify_string(data), i))
 
     def _frame_read(self):
-        try:
-            return self.queue.get(True, self.COMMAND_TIMEOUT)
-        except Queue.Empty:
-            raise OnzoException(-1, 'read timeouted: %.3f seconds' % self.COMMAND_TIMEOUT)
+#        try:
+            bytes = self.epRead.read(64, timeout = int(self.COMMAND_TIMEOUT*1000))
+            return "".join(map(chr,bytes))
+#            return self.queue.get(True, self.COMMAND_TIMEOUT)
+#        except Queue.Empty:
+#            raise OnzoException(-1, 'read timeouted: %.3f seconds' % self.COMMAND_TIMEOUT)
 
     def flush_buffer(self):
         while not self.queue.empty():
@@ -212,9 +282,9 @@ class Device(object):
     @disconnect_on_error
     def message_send(self, msg, final_frame = 1):
         self.last_command_time = time.time()
-        if not self.is_buffer_empty():
-            self.flush_buffer()
-            log.warning('Sending command but buffer is not empty.')
+#        if not self.is_buffer_empty():
+#            self.flush_buffer()
+#            log.warning('Sending command but buffer is not empty.')
 
         def fw(buf):
             if self.debug:

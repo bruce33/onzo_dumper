@@ -54,6 +54,7 @@ def main(args):
     parser.add_option('--bug169', action='store_true', dest='bug169', help='test bug169')
     parser.add_option('--bug168', action='store_true', dest='bug168', help='test bug168')
     parser.add_option('--humanDate', action='store_true', dest='humanDate', help='Print date in human format rather than Unix time')
+    parser.add_option('--unitNumber', action='store', dest='unitNumber', help='Specify a unit number (starting at 0)', type='int')
     parser.add_option('--debug', action='store_true', dest='debug', help='Print debug information')
     parser.add_option('--blocktransfer', action='store', dest='blocktransfer', help='Receive all used blocks for specified data_type')
     parser.add_option('-r', '--request', action='store', dest='request', default='0x01', help='register_id (default is %default)')
@@ -68,45 +69,22 @@ def main(args):
         testsuite()
         sys.exit(0)
     if options.testretrieve:
-        get_register, get_block_request = preparedevice(options.debug)
+        get_register, get_block_request = preparedevice(debug=options.debug, unitNumber=options.unitNumber)
         testretrieve(get_register, get_block_request)
         sys.exit(0)
     if options.blocktransfer:
-        d, get_register, get_block_request = preparedevice(options.debug)
+        d, get_register, get_block_request = preparedevice(debug=options.debug, unitNumber=options.unitNumber)
         blocktransfer(int(options.blocktransfer), get_register, get_block_request, humanDate=options.humanDate)
         d.disconnect()
         sys.exit(0)
     for condition, foo in zip((options.bug165, options.bug169, options.bug168), (bug165, bug169, bug168)):
         if condition:
             logging.getLogger('device').setLevel(logging.ERROR)
-            get_register, get_block_request = preparedevice()
+            get_register, get_block_request = preparedevice(debug=options.debug, unitNumber=options.unitNumber)
             foo(get_register, get_block_request)
             sys.exit(0)
 
-    # dev = usb.core.find(idVendor=0x04d8, idProduct=0x003f)
-    # if dev is None:
-    #     raise ValueError('Device not connected')
-    # else:
-    #     for interface in range(0,1):
-    #         detach(dev, interface)
-    #         unclaim(dev, interface)
-    # dev.set_configuration()
-    # cfg = dev.get_active_configuration()
-    # intf = cfg[(0,0)]
-    #
-    # ep = usb.util.find_descriptor(
-    #     intf,
-    #     # match the first OUT endpoint
-    #     custom_match = \
-    #         lambda e: \
-    #             usb.util.endpoint_direction(e.bEndpointAddress) == \
-    #             usb.util.ENDPOINT_OUT)
-    #
-    # assert ep is not None
-    # ep.write('')
-
-
-    d = device.Device()
+    d = device.Device(debug=options.debug, unitNumber=options.unitNumber)
     d.connect()
 
     def p(s):
@@ -371,8 +349,8 @@ def bug168(get_register, get_block_request):
     log.info(' [*] retrieving data finished')
 
 
-def preparedevice(debug=False):
-    d = device.Device(debug = debug)
+def preparedevice(debug=False, unitNumber=0):
+    d = device.Device(debug = debug, unitNumber = unitNumber)
     d.connect()
     pr = usbprotocol.pack_reqest
 

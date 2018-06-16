@@ -32,6 +32,17 @@ To get human readable dates instead of Unix time, append ```--humanDate```
 
 Even with udev rules making the device chmod 666 then sudo appears to be required just now.
 
+## Multiple units
+
+The units I have all have their serial number set to 0. To allow reading from multiple units,
+```--unitNumber <n>``` can be appended to read from a particular unit (starting at 0).
+
+For example, if you had 2 units attached, you could run the following to read from both units.
+It appears to be stable, but moving USB ports may result in a different order.
+```
+sudo python reader.py --blocktransfer=4 --unitNumber 0
+sudo python reader.py --blocktransfer=4 --unitNumber 1
+```
 ## Original code
 
 Original unpacked source from can be found in the originalSource branch. It is from [en4rab](https://www.en4rab.co.uk/onzo/).

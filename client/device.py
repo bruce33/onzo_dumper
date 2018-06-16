@@ -12,6 +12,7 @@ log = logging.getLogger('device')
 import wx
 from client import devicetypes
 from client import usbutils
+from itertools import islice
 import usb
 # from client import utils
 # from client import internationalisation
@@ -125,7 +126,7 @@ class Device(object):
     last_command_time = 0.0
     connected = False
 
-    def __init__(self, firmwareupdate = False, debug = True):
+    def __init__(self, firmwareupdate = False, debug = True, unitNumber=0):
         self.bootloadermode = firmwareupdate
         self.debug = debug
         self.callback_ptr = CALLBACK(self.callback)
@@ -133,6 +134,7 @@ class Device(object):
         self.vendorid = None
         self.productid = None
         self.dev = None
+        self.unitNumber = unitNumber
         return
 
     def find(self):
@@ -142,33 +144,6 @@ class Device(object):
             r = onzo_dll.ONZO_DisplayFind()
             return r or None
         return None
-
-    def connect2(self, vendor_id = devicetypes.vendor_ids[0], product_id = devicetypes.default_product_id):
-        if self.bootloadermode:
-            return
-        if self.connected and MAC:
-            connected = onzo_dll.ONZO_CheckStillConnected()
-            if connected == 0:
-                self.connected = False
-        last_call_recent = True
-        if (WINDOWS or LINUX) and time.time() - self.last_command_time > self.COMMAND_TIMEOUT + 1.0:
-            last_call_recent = False
-        if self.connected and last_call_recent:
-            if vendor_id == self.vendorid and product_id == self.productid:
-                return
-            else:
-                raise OnzoException(1)
-        log.debug('connect - going to connect VID=%d, PID=%d' % (vendor_id, product_id))
-        r = onzo_dll.ONZO_DisplayInit2(vendor_id, product_id, self.callback_ptr)
-        if r != 0:
-            log.debug('Failed to connect to device %d.' % r)
-            raise OnzoException(r)
-        else:
-            log.debug('connected to device VID=%d, PID=%d, return=%d.' % (vendor_id, product_id, r))
-        self.vendorid = vendor_id
-        self.productid = product_id
-        self.last_command_time = time.time()
-        self.connected = True
 
     '''udev rules need to be set in /etc/udev/rules.d'''
 
@@ -196,8 +171,12 @@ class Device(object):
  #           self.detach(interface)
         self.dev.reset()
 
+
     def connect(self, vendor_id = devicetypes.vendor_ids[0], product_id = devicetypes.default_product_id):
-        self.dev = usb.core.find(idVendor=vendor_id, idProduct=product_id)
+        devices = usb.core.find(idVendor=vendor_id, idProduct=product_id, find_all=True)
+
+        self.dev = next(islice(devices, self.unitNumber, None), None)
+
         if self.dev is None:
             raise ValueError('Device not connected')
         else:

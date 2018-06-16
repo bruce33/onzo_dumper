@@ -26,6 +26,13 @@ sudo python reader.py --blocktransfer=5
 For each blocktransfer type, a file will be produced. An example of running with blocktransfer 3 and 4 (with different date
 formats, see below) are in the [docs](https://github.com/bruce33/onzo_dumper/tree/master/docs) directory.
 
+The block transfer types are:
+1. Energy Low Res
+2. Energy High Res
+3. Power Real Standard
+4. Power Real Fine
+5. Power Reactive Standard
+
 To get a hex dump of the USB packets, append ```--debug```
 
 To get human readable dates instead of Unix time, append ```--humanDate```

@@ -53,7 +53,7 @@ sudo python reader.py --blocktransfer=4 --unitNumber 1
 ## Original code
 
 Original unpacked source from can be found in the originalSource branch. It is from [en4rab](https://www.en4rab.co.uk/onzo/).
-There are also working Windows exe files at the same place. 
+There are also working Windows exe files at the same place. Some .zip files iare in orig as it was offline Oct 2024.
 
 ## Background
 
